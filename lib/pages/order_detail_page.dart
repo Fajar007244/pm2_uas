@@ -262,6 +262,24 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
             elevation: 4,
             child: Padding(
               padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Informasi Pengiriman',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildAddressInfo(),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            elevation: 4,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -367,6 +385,55 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildAddressInfo() {
+    final recipientName = order['recipient_name'] ?? 'Nama Penerima Tidak Tersedia';
+    final recipientPhone = order['recipient_phone'] ?? 'Nomor Telepon Tidak Tersedia';
+    final shippingAddress = order['shipping_address'] ?? 'Alamat Tidak Tersedia';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.person_outline, size: 20, color: Colors.grey),
+            const SizedBox(width: 8),
+            Text(
+              recipientName,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            const Icon(Icons.phone_outlined, size: 20, color: Colors.grey),
+            const SizedBox(width: 8),
+            Text(
+              recipientPhone,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.location_on_outlined, size: 20, color: Colors.grey),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                shippingAddress,
+                style: Theme.of(context).textTheme.bodyMedium,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

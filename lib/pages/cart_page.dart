@@ -138,73 +138,6 @@ class _CartPageState extends State<CartPage> {
     }
   }
 
-  Future<void> _debugAddItemToCart() async {
-    try {
-      final userId = supabase.auth.currentUser?.id;
-      if (userId == null) {
-        throw Exception('User not logged in');
-      }
-
-      // First, get or create a draft order for the user
-      var orderResponse = await supabase
-          .from('orders')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('status', 'draft')
-          .maybeSingle();
-
-      if (orderResponse == null) {
-        orderResponse = await supabase
-            .from('orders')
-            .insert({'user_id': userId, 'status': 'draft', 'total_price': 0})
-            .select('id')
-            .single();
-      }
-
-      final orderId = orderResponse['id'];
-
-      // Fetch a sample product to add to cart
-      final productResponse = await supabase
-          .from('products')
-          .select('id, price, name')
-          .eq('is_active', true)
-          .limit(1)
-          .single();
-
-      // Add the product to cart
-      await supabase.from('order_items').insert({
-        'order_id': orderId,
-        'product_id': productResponse['id'],
-        'quantity': 1,
-        'price': productResponse['price']
-      });
-
-      // Refresh cart
-      await _fetchCartItems();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Berhasil menambahkan ${productResponse['name']} ke keranjang'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      _logger.e('Error adding debug item to cart', error: e);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Gagal menambahkan item: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
   void _calculateTotalPrice() {
     final total = _cartItems.fold(0.0, (sum, item) {
       // Only calculate total for selected items
@@ -276,6 +209,50 @@ class _CartPageState extends State<CartPage> {
   }
 
   Future<void> _createOrder() async {
+    // Check if any items are selected
+    final selectedItemsCount = _selectedItems.values.where((selected) => selected).length;
+    if (selectedItemsCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih minimal satu item untuk membuat pesanan'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Pesanan'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Anda akan membuat pesanan dengan:'),
+            const SizedBox(height: 8),
+            Text('- Jumlah Item: $selectedItemsCount'),
+            Text('- Total Harga: Rp ${_totalPrice.toStringAsFixed(0)}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Konfirmasi'),
+          ),
+        ],
+      ),
+    );
+
+    // Proceed only if confirmed
+    if (confirmed != true) return;
+
     if (_selectedAddress == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -297,7 +274,7 @@ class _CartPageState extends State<CartPage> {
           .from('orders')
           .insert({
             'user_id': userId,
-            'status': 'draft',
+            'status': 'pending',
             'total_price': _totalPrice,
             'recipient_name': _selectedAddress!['recipient'] ?? '',
             'recipient_phone': _selectedAddress!['phone'] ?? '',
@@ -417,13 +394,8 @@ class _CartPageState extends State<CartPage> {
       return '';
     }
 
-    // Remove any leading '/' or 'product_images/'
-    String cleanPath = imagePath
-        .replaceFirst(RegExp(r'^/'), '')
-        .replaceFirst(RegExp(r'^product_images/'), '');
-
-    // Construct the full URL
-    return 'https://ozllkmkouqbjteayjcyy.supabase.co/storage/v1/object/public/product_images/$cleanPath';
+    // Use Supabase storage public URL method
+    return Supabase.instance.client.storage.from('product_images').getPublicUrl(imagePath);
   }
 
   Widget _buildProductImage(String? imagePath) {
@@ -494,13 +466,6 @@ class _CartPageState extends State<CartPage> {
       appBar: AppBar(
         title: const Text('Keranjang'),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _debugAddItemToCart,
-            tooltip: 'Tambah Item Debug',
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -679,10 +644,11 @@ class _CartPageState extends State<CartPage> {
                             ),
                             const SizedBox(height: 16),
                             ElevatedButton(
-                              onPressed: _createOrder,
+                              onPressed: _selectedItems.values.where((selected) => selected).length > 0 ? _createOrder : null,
                               style: ElevatedButton.styleFrom(
                                 minimumSize: const Size(double.infinity, 50),
                                 backgroundColor: Colors.green[700],
+                                disabledBackgroundColor: Colors.grey[400],
                               ),
                               child: const Text(
                                 'Buat Pesanan',

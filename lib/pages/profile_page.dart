@@ -7,10 +7,10 @@ import 'login_page.dart';
 import 'package:path/path.dart' as path;
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({Key? key}) : super(key: key);
+  const ProfilePage({super.key});
 
   @override
-  _ProfilePageState createState() => _ProfilePageState();
+  State<ProfilePage> createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
@@ -24,13 +24,19 @@ class _ProfilePageState extends State<ProfilePage> {
   
   bool _isLoading = false;
   User? _currentUser;
-  Map<String, dynamic>? _userProfile;
   File? _selectedProfilePicture;
   String? _profilePictureUrl;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize controllers with empty strings
+    _nameController = TextEditingController(text: '');
+    _emailController = TextEditingController(text: '');
+    _phoneController = TextEditingController(text: '');
+    _addressController = TextEditingController(text: '');
+
     _fetchUserData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshUserProfile();
@@ -49,22 +55,25 @@ class _ProfilePageState extends State<ProfilePage> {
           
           // Fetch user profile
           _profileService.getProfile(user.id).then((profile) {
+            if (!mounted) return;
             setState(() {
-              _userProfile = profile;
-              
-              // Initialize controllers with fetched data
-              _nameController = TextEditingController(text: profile?['name'] ?? '');
-              _emailController = TextEditingController(text: user.email ?? '');
-              _phoneController = TextEditingController(text: profile?['phone'] ?? '');
-              _addressController = TextEditingController(text: profile?['address'] ?? '');
+              // Update controllers with fetched data or keep empty
+              _nameController.text = profile?['name'] ?? '';
+              _emailController.text = user.email ?? '';
+              _phoneController.text = profile?['phone'] ?? '';
+              _addressController.text = profile?['address'] ?? '';
               _profilePictureUrl = profile?['profile_picture'];
               
               _isLoading = false;
             });
           });
         });
+      } else {
+        // No user found, ensure loading state is stopped
+        setState(() => _isLoading = false);
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error fetching profile: $e')),
@@ -78,8 +87,9 @@ class _ProfilePageState extends State<ProfilePage> {
       final pickedFile = await _profileService.pickProfilePicture();
       
       if (pickedFile == null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('No image was selected'),
             backgroundColor: Colors.red,
           ),
@@ -92,9 +102,9 @@ class _ProfilePageState extends State<ProfilePage> {
       try {
         selectedFile = File(pickedFile.path);
       } catch (e) {
-        print('File conversion error: $e');
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Could not process the selected image'),
             backgroundColor: Colors.red,
           ),
@@ -107,14 +117,14 @@ class _ProfilePageState extends State<ProfilePage> {
       try {
         fileSize = await selectedFile.length();
       } catch (e) {
-        print('File size check error: $e');
         fileSize = 0;
       }
 
       const maxFileSize = 5 * 1024 * 1024; // 5MB
       if (fileSize > maxFileSize) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('File is too large. Maximum size is 5MB.'),
             backgroundColor: Colors.red,
           ),
@@ -126,8 +136,9 @@ class _ProfilePageState extends State<ProfilePage> {
       final allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif'];
       final fileExtension = path.extension(selectedFile.path).toLowerCase();
       if (!allowedExtensions.contains(fileExtension)) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text('Invalid file type. Only JPG, PNG, and GIF are allowed.'),
             backgroundColor: Colors.red,
           ),
@@ -154,15 +165,13 @@ class _ProfilePageState extends State<ProfilePage> {
         errorMessage = 'Invalid file type. Only JPG, PNG, and GIF are allowed.';
       }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),
           backgroundColor: Colors.red,
         ),
       );
-
-      // Log the full error for debugging
-      print('Profile Picture Selection Error: $e');
     }
   }
 
@@ -192,7 +201,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Profile picture updated successfully'),
           backgroundColor: Colors.green,
         ),
@@ -216,16 +225,31 @@ class _ProfilePageState extends State<ProfilePage> {
       // Fetch updated user profile
       final updatedProfile = await _profileService.getProfile(_currentUser!.id);
       
+      // If no profile found, return early
+      if (updatedProfile == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No profile data found'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Safely update state
+      if (!mounted) return;
       setState(() {
-        _userProfile = updatedProfile;
-        _profilePictureUrl = updatedProfile?['profile_picture'];
+        _profilePictureUrl = updatedProfile['profile_picture'] ?? _profilePictureUrl;
         
-        // Update text controllers if needed
-        _nameController.text = updatedProfile?['name'] ?? '';
-        _phoneController.text = updatedProfile?['phone'] ?? '';
-        _addressController.text = updatedProfile?['address'] ?? '';
+        // Update text controllers if needed, with null-safe defaults
+        _nameController.text = updatedProfile['name'] ?? _nameController.text;
+        _phoneController.text = updatedProfile['phone'] ?? _phoneController.text;
+        _addressController.text = updatedProfile['address'] ?? _addressController.text;
       });
     } catch (e) {
+      // Check mounted before showing SnackBar
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error refreshing profile: ${e.toString()}'),
@@ -256,12 +280,11 @@ class _ProfilePageState extends State<ProfilePage> {
       }
 
       setState(() {
-        _userProfile = updatedProfile;
         _isLoading = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Profile updated successfully')),
+        const SnackBar(content: Text('Profile updated successfully')),
       );
     } catch (e) {
       setState(() => _isLoading = false);
@@ -272,15 +295,78 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logout() async {
+    // Show logout confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Konfirmasi Logout'),
+        content: const Text('Apakah Anda yakin ingin keluar dari akun?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    // Proceed only if confirmed
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
     try {
+      // Perform logout
       await _authService.signOut();
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => LoginPage()),
-      );
+
+      // Navigate to login page and remove all previous routes
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
     } catch (e) {
+      // Handle logout errors
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout failed: $e')),
+        SnackBar(
+          content: Text('Gagal logout: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exitApplication() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Keluar Aplikasi'),
+        content: const Text('Apakah Anda yakin ingin menutup aplikasi?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    // Exit application if confirmed
+    if (confirmed == true) {
+      exit(0);
     }
   }
 
@@ -288,16 +374,20 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('My Profile'),
+        title: const Text('My Profile'),
         actions: [
           IconButton(
-            icon: Icon(Icons.logout),
+            icon: const Icon(Icons.logout),
             onPressed: _logout,
+          ),
+          IconButton(
+            icon: const Icon(Icons.exit_to_app),
+            onPressed: _exitApplication,
           ),
         ],
       ),
       body: _isLoading 
-        ? Center(child: CircularProgressIndicator())
+        ? const Center(child: CircularProgressIndicator())
         : SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(24.0),
@@ -318,7 +408,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               : null),
                           child: _selectedProfilePicture == null && 
                                  _profilePictureUrl == null
-                            ? Icon(
+                            ? const Icon(
                                 Icons.person, 
                                 size: 60, 
                                 color: Colors.white
@@ -333,7 +423,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             radius: 20,
                             backgroundColor: Colors.white,
                             child: IconButton(
-                              icon: Icon(
+                              icon: const Icon(
                                 Icons.edit, 
                                 color: Colors.orange,
                                 size: 20,
@@ -347,49 +437,65 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   // Show upload button if a new picture is selected
                   if (_selectedProfilePicture != null) ...[
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _uploadProfilePicture,
-                      child: Text('Upload Profile Picture'),
+                      child: const Text('Upload Profile Picture'),
                     ),
                   ],
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   TextField(
                     controller: _nameController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Full Name',
                       prefixIcon: Icon(Icons.person),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _emailController,
                     enabled: false, // Email cannot be changed
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Email',
                       prefixIcon: Icon(Icons.email),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _phoneController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Phone Number',
                       prefixIcon: Icon(Icons.phone),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _addressController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Address',
                       prefixIcon: Icon(Icons.location_on),
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _saveProfile,
-                    child: Text('Save Profile'),
+                    child: const Text('Save Profile'),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _exitApplication,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red[600],
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.exit_to_app),
+                        const SizedBox(width: 8),
+                        const Text('Keluar Aplikasi'),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -400,6 +506,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    // Dispose of controllers to prevent memory leaks
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
